@@ -62,36 +62,24 @@ export async function executeWeatherAgent(input: string, threadId: string, resou
     const abortController = agentExecutionManager.createController(threadId);
     
     // Use the stream method to demonstrate longer running process that can be aborted
-    console.log('stream is gonna start')
+    console.log('generating response...')
    
-    const agentStream = await weatherAgent.stream('', {
+    const response = await weatherAgent.generate([{
+      role: 'user',
+      content: input,
+    }], {
       threadId,
       resourceId,
       abortSignal: abortController.signal,
     });
 
-    let fullResponse = '';
-     try {
-       for await (const chunk of agentStream.textStream) {
-         fullResponse += chunk;
-         // In a real app, you might want to send each chunk to the client
-         // This is just for demonstration purposes
-       }
-     } catch (error) {
-       // Check if this was aborted
-       if (error instanceof DOMException && error.name === 'AbortError') {
-         throw error; // Re-throw to be caught by outer catch block
-       }
-       console.error('Error during streaming:', error);
-     }
-    
     // If we completed successfully, remove the controller
     agentExecutionManager.abortExecution(threadId);
     
     return {
       id: memory.generateId(),
       role: 'assistant',
-      content: fullResponse || 'No response generated',
+      content: response.text || 'No response generated',
       createdAt: new Date().toISOString(),
     };
   } catch (error) {
@@ -110,6 +98,13 @@ export async function executeWeatherAgent(input: string, threadId: string, resou
     const errorMessage = error instanceof Error ? error.message : 'Sorry, I encountered an error while fetching the weather information. Please try again.';
     
     // Store the error message with proper format
+    await memory.addMessage({
+      threadId: threadId,
+      role: 'user', 
+      content: input,
+      type: 'text'
+    });
+
     await memory.addMessage({
       threadId: threadId,
       role: 'assistant', 
